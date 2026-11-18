@@ -10,17 +10,19 @@ public class GameManager : MonoBehaviour
     [SerializeField] int maxStrikes = 3;
     [SerializeField] BlockSpawner spawner;
     [SerializeField] CacheSlot[] allSlots;       // drag all 8 slots in
-    [SerializeField] TMP_Text monitorText, scoreText, strikesText;
+    [SerializeField] TMP_Text monitorText, scoreText, strikesText, answerText;
 
     readonly Dictionary<int, Queue<CacheSlot>> fifo = new Dictionary<int, Queue<CacheSlot>>();
     Block current;
     int score, strikes;
     bool gameOver;
+    
 
     void Start()
     {
         for (int s = 0; s < setCount; s++) fifo[s] = new Queue<CacheSlot>();
-        monitorText.text = $"Set Index = Block % {setCount}";
+        monitorText.text = "Set Index = Block % " + setCount;
+        answerText.gameObject.SetActive(false);
         UpdateHud();
     }
 
@@ -34,11 +36,13 @@ public class GameManager : MonoBehaviour
         current = front;
         if (current == null) return;
 
-        int n = current.Number, setIndex = n % setCount;
-        string bits = System.Convert.ToString(n, 2).PadLeft(4, '0');
-        int idx = Mathf.RoundToInt(Mathf.Log(setCount, 2));
-        string hi = bits.Substring(0, bits.Length - idx), lo = bits.Substring(bits.Length - idx);
-        monitorText.text = $"Set Index = Block % {setCount}\n\nBlock {n}\n{n} % {setCount} = {setIndex}\nBits: {hi}<color=#5ADCFF>{lo}</color>";
+        
+        answerText.gameObject.SetActive(false);
+
+        monitorText.text = "Set Index = Block % " + setCount;
+
+        int n = current.Number;
+        int setIndex = n % setCount;
 
         if (SlotsInSet(setIndex).Any(s => s.Occupant != null && s.Occupant.Number == n))
             StartCoroutine(CacheHit(current, setIndex));
@@ -63,9 +67,22 @@ public class GameManager : MonoBehaviour
 
         if (tapped.SetIndex != correct)              // wrong set: strike and explain
         {
+            
+            answerText.gameObject.SetActive(true);
             tapped.Flash(Color.red);
             strikes++;
-            monitorText.text = $"Wrong!\n{block.Number} % {setCount} = {correct}\nIt belongs in Cache {correct}.";
+            string bits = System.Convert.ToString(block.Number, 2).PadLeft(4, '0');
+            int idx = Mathf.RoundToInt(Mathf.Log(setCount, 2));
+
+            string hi = bits.Substring(0, bits.Length - idx);
+            string lo = bits.Substring(bits.Length - idx);
+
+            answerText.text =
+                $"Wrong!\n\nBlock {block.Number}\n" +
+                $"{block.Number} % {setCount} = {correct}\n" +
+                $"Bits: {hi}<color=#5ADCFF>{lo}</color>\n\n" +
+                $"It belongs in Cache {correct}.";
+
             spawner.ReturnToFront(block);
             UpdateHud();
             if (strikes >= maxStrikes) EndGame();
