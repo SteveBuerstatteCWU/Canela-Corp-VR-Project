@@ -29,7 +29,8 @@ public class GazeInteractor : MonoBehaviour
             if (tap && b != null && b == spawner.Front)
             {
                 held = spawner.TakeFront();
-                held.SetPhysical(false);                         // gaze ray passes through it
+                held.SetPhysical(false);         // gaze ray passes through it
+                held.SetHighlight(true);
             }
         }
         else
@@ -40,6 +41,7 @@ public class GazeInteractor : MonoBehaviour
             CacheSlot slot = hit.collider ? hit.collider.GetComponentInParent<CacheSlot>() : null;
             if (tap && slot != null)
             {
+                held.SetHighlight(false);
                 game.TryPlace(held, slot);
                 held = null;
             }
