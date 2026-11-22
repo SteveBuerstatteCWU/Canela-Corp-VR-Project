@@ -12,6 +12,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] BlockSpawner spawner;
     [SerializeField] CacheSlot[] allSlots;       // drag all 8 slots in
     [SerializeField] TMP_Text monitorText, scoreText, strikesText, answerText;
+    [SerializeField] WrongSlotSound wrongSlotSound;
 
     readonly Dictionary<int, Queue<CacheSlot>> fifo =
         new Dictionary<int, Queue<CacheSlot>>();
@@ -101,6 +102,8 @@ public class GameManager : MonoBehaviour
             answerText.gameObject.SetActive(true);
 
             tapped.Flash(Color.red);
+
+            if (wrongSlotSound != null) wrongSlotSound.PlayWrongSlotSound();
 
             strikes++;
 
