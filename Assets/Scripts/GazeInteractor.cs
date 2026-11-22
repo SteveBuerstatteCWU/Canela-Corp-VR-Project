@@ -1,3 +1,4 @@
+
 using UnityEngine;
 
 public class GazeInteractor : MonoBehaviour
@@ -12,7 +13,7 @@ public class GazeInteractor : MonoBehaviour
     static bool Tapped()
     {
 #if UNITY_EDITOR
-        return Input.GetMouseButtonDown(0);                     // left click = Cardboard button
+        return Input.GetMouseButtonDown(0);     // left click = Cardboard button
 #else
         return Google.XR.Cardboard.Api.IsTriggerPressed;
 #endif
@@ -26,20 +27,27 @@ public class GazeInteractor : MonoBehaviour
         if (held == null)
         {
             Block b = hit.collider ? hit.collider.GetComponentInParent<Block>() : null;
+
             if (tap && b != null && b == spawner.Front)
             {
                 held = spawner.TakeFront();
-                held.SetPhysical(false);                         // gaze ray passes through it
+                held.SetPhysical(false);         // gaze ray passes through it
+                held.SetHighlight(true);         // highlight while holding
             }
         }
         else
         {
             Vector3 hover = head.position + head.forward * 1.2f + Vector3.down * 0.35f;
-            held.transform.position = Vector3.Lerp(held.transform.position, hover, 12f * Time.deltaTime);
+            held.transform.position = Vector3.Lerp(
+                held.transform.position, hover, 12f * Time.deltaTime);
 
-            CacheSlot slot = hit.collider ? hit.collider.GetComponentInParent<CacheSlot>() : null;
+            CacheSlot slot = hit.collider
+                ? hit.collider.GetComponentInParent<CacheSlot>()
+                : null;
+
             if (tap && slot != null)
             {
+                held.SetHighlight(false);        // remove highlight when placing
                 game.TryPlace(held, slot);
                 held = null;
             }
