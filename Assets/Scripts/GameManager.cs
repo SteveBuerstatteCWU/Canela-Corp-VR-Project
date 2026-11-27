@@ -12,6 +12,11 @@ public class GameManager : MonoBehaviour
     [SerializeField] BlockSpawner spawner;
     [SerializeField] CacheSlot[] allSlots;       // drag all 8 slots in
     [SerializeField] TMP_Text monitorText, scoreText, strikesText, answerText;
+<<<<<<< Updated upstream
+=======
+    [SerializeField] WrongSlotSound wrongSlotSound;      // optional (Eli's sound); leave empty if unused
+    [SerializeField] GameObject gameOverTint;
+>>>>>>> Stashed changes
 
     readonly Dictionary<int, Queue<CacheSlot>> fifo =
         new Dictionary<int, Queue<CacheSlot>>();
@@ -28,6 +33,8 @@ public class GameManager : MonoBehaviour
         monitorText.text = $"Set Index = Block % {setCount}";
 
         answerText.gameObject.SetActive(false);
+        
+        gameOverTint.SetActive(false);
 
         UpdateHud();
     }
@@ -130,7 +137,51 @@ public class GameManager : MonoBehaviour
 
         if (target == null)                          // set is full: FIFO replacement
         {
+<<<<<<< Updated upstream
             if (fifo[correct].Count == 0)
+=======
+            PlaceInto(free, block);
+            score += 10;
+            UpdateHud();
+            return true;
+        }
+
+        // First tap of a replacement: the set is full, so the player must pick a victim.
+        pendingSet = correct;
+        foreach (var s in SlotsInSet(correct)) s.Highlight(Orange);
+        ShowAnswer($"\nCache {correct} is full!\nTap the block you want to evict.\n{PolicyHint()}");
+        return false;                                // the player keeps holding the block
+    }
+
+    void ResolveEviction(Block block, CacheSlot chosen)
+    {
+        // The block the policy would evict: lowest arrival tick (FIFO) or lowest last-used tick (LRU).
+        CacheSlot best = SlotsInSet(pendingSet)
+            .OrderBy(s => policy == ReplacementPolicy.FIFO ? s.ArrivalTick : s.LastUsedTick)
+            .First();
+
+        bool correct = chosen == best;
+        int chosenNumber = chosen.Occupant.Number;
+        int bestNumber = best.Occupant.Number;
+
+        foreach (var s in SlotsInSet(pendingSet)) s.ClearHighlight();
+        pendingSet = -1;
+
+        chosen.Evict();                              // the player's choice is carried out either way
+        PlaceInto(chosen, block);
+
+        if (correct)
+        {
+            score += 10;
+            ShowAnswer($"\nCorrect!\n{policy} evicts Block {chosenNumber}.");
+        }
+        else
+        {
+            score += 3;
+            ShowAnswer($"\nNot quite,{policy} would evict Block {bestNumber}.\nYou evicted Block {chosenNumber}.");
+
+            if (strikeOnBadEviction)
+>>>>>>> Stashed changes
             {
                 Debug.LogError("FIFO is empty for Cache Set " + correct);
                 return;
@@ -173,6 +224,8 @@ public class GameManager : MonoBehaviour
     void EndGame()
     {
         gameOver = true;
+
+        gameOverTint.SetActive(true);
 
         spawner.enabled = false;
 
