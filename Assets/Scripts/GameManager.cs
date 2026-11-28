@@ -1,39 +1,37 @@
-
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
 
+public enum ReplacementPolicy { FIFO, LRU }
+
 public class GameManager : MonoBehaviour
 {
     [SerializeField] int setCount = 4;           // power of two; must match the number of racks
     [SerializeField] int maxStrikes = 3;
+    [SerializeField] ReplacementPolicy policy = ReplacementPolicy.FIFO;
+    [SerializeField] bool strikeOnBadEviction = false;   // tick for a harder game
     [SerializeField] BlockSpawner spawner;
     [SerializeField] CacheSlot[] allSlots;       // drag all 8 slots in
     [SerializeField] TMP_Text monitorText, scoreText, strikesText, answerText;
-<<<<<<< Updated upstream
-=======
     [SerializeField] WrongSlotSound wrongSlotSound;      // optional (Eli's sound); leave empty if unused
     [SerializeField] GameObject gameOverTint;
->>>>>>> Stashed changes
 
-    readonly Dictionary<int, Queue<CacheSlot>> fifo =
-        new Dictionary<int, Queue<CacheSlot>>();
+    static readonly Color Orange = new Color(1f, 0.6f, 0.2f);
 
     Block current;
     int score, strikes;
+    int tick;                                    // goes up by 1 on every placement and every cache hit
     bool gameOver;
+    int pendingSet = -1;                         // -1 = normal play; otherwise the full set the player must choose a victim from
+    bool AwaitingEviction => pendingSet >= 0;
 
     void Start()
     {
-        for (int s = 0; s < setCount; s++)
-            fifo[s] = new Queue<CacheSlot>();
-
         monitorText.text = $"Set Index = Block % {setCount}";
 
         answerText.gameObject.SetActive(false);
-        
         gameOverTint.SetActive(false);
 
         UpdateHud();
@@ -44,7 +42,7 @@ public class GameManager : MonoBehaviour
 
     void Update()
     {
-        if (gameOver) return;
+        if (gameOver || AwaitingEviction) return;    // pause belt logic while the player is choosing
 
         Block front = spawner.Front;
 
@@ -84,8 +82,13 @@ public class GameManager : MonoBehaviour
         foreach (var s in SlotsInSet(setIndex))
         {
             if (s.Occupant != null && s.Occupant.Number == b.Number)
+            {
                 s.Flash(Color.green);
+                s.Touch(++tick);                     // a hit counts as a "use" (matters for LRU)
+            }
         }
+
+        RefreshTags();
 
         score += 5;
         UpdateHud();
@@ -96,10 +99,24 @@ public class GameManager : MonoBehaviour
     }
 
     // Called by GazeInteractor when the player taps a slot while holding a block.
-    public void TryPlace(Block block, CacheSlot tapped)
+    // Returns true when the block has left the player's hands, false if they keep holding it.
+    public bool TryPlace(Block block, CacheSlot tapped)
     {
         // Hide the previous explanation when another placement is attempted.
         answerText.gameObject.SetActive(false);
+
+        // Second tap of a replacement: the player is choosing which block to evict.
+        if (AwaitingEviction)
+        {
+            if (tapped.SetIndex != pendingSet || tapped.Occupant == null)
+            {
+                ShowAnswer($"\nCache {pendingSet} is full!\nTap one of ITS blocks to evict.\n{PolicyHint()}");
+                return false;                        // nothing changes, keep holding the block
+            }
+
+            ResolveEviction(block, tapped);
+            return true;
+        }
 
         int correct = block.Number % setCount;
 
@@ -108,6 +125,8 @@ public class GameManager : MonoBehaviour
             answerText.gameObject.SetActive(true);
 
             tapped.Flash(Color.red);
+
+            if (wrongSlotSound != null) wrongSlotSound.PlayWrongSlotSound();
 
             strikes++;
 
@@ -129,17 +148,13 @@ public class GameManager : MonoBehaviour
             if (strikes >= maxStrikes)
                 EndGame();
 
-            return;
+            return true;
         }
 
-        CacheSlot target = SlotsInSet(correct)
-            .FirstOrDefault(s => s.Occupant == null);
+        CacheSlot free = SlotsInSet(correct).FirstOrDefault(s => s.Occupant == null);
 
-        if (target == null)                          // set is full: FIFO replacement
+        if (free != null)                            // room in the set: simple placement
         {
-<<<<<<< Updated upstream
-            if (fifo[correct].Count == 0)
-=======
             PlaceInto(free, block);
             score += 10;
             UpdateHud();
@@ -178,35 +193,63 @@ public class GameManager : MonoBehaviour
         else
         {
             score += 3;
-            ShowAnswer($"\nNot quite,{policy} would evict Block {bestNumber}.\nYou evicted Block {chosenNumber}.");
+            ShowAnswer($"\nNot quite, {policy} would evict Block {bestNumber}.\nYou evicted Block {chosenNumber}.");
 
             if (strikeOnBadEviction)
->>>>>>> Stashed changes
             {
-                Debug.LogError("FIFO is empty for Cache Set " + correct);
-                return;
+                strikes++;
+                if (strikes >= maxStrikes) EndGame();
             }
-
-            target = fifo[correct].Dequeue();
-
-            if (target.Occupant != null)
-            {
-                monitorText.text =
-                    $"Set full! FIFO evicts Block {target.Occupant.Number}.";
-            }
-
-            target.Evict();
         }
 
-        target.Place(block);
-
-        fifo[correct].Enqueue(target);
-
-        target.Flash(Color.green);
-
-        score += 10;
-
         UpdateHud();
+    }
+
+    void PlaceInto(CacheSlot slot, Block block)
+    {
+        slot.Place(block, ++tick);
+        slot.Flash(Color.green);
+        RefreshTags();
+    }
+
+    void ShowAnswer(string text)
+    {
+        answerText.gameObject.SetActive(true);
+        answerText.text = text;
+    }
+
+    string PolicyHint() => policy == ReplacementPolicy.FIFO
+        ? "FIFO: evict the block that arrived first."
+        : "LRU: evict the block used longest ago.";
+
+    // Small labels under each slot give the player the information they need to decide.
+    void RefreshTags()
+    {
+        // Process each cache set independently.
+    foreach (var group in allSlots.GroupBy(s => s.SetIndex))
+    {
+        // Get occupied slots and sort them according to the replacement policy.
+        var occupied = group
+            .Where(s => s.Occupant != null)
+            .OrderBy(s => policy == ReplacementPolicy.FIFO
+                ? s.ArrivalTick
+                : s.LastUsedTick)
+            .ToList();
+
+        // Assign labels starting from #1 for each cache set.
+        for (int i = 0; i < occupied.Count; i++)
+        {
+            occupied[i].SetTag(policy == ReplacementPolicy.FIFO
+                ? $"arrived #{i + 1}"
+                : $"used #{i + 1}");
+        }
+
+        // Clear labels for empty slots.
+        foreach (var slot in group.Where(s => s.Occupant == null))
+        {
+            slot.SetTag("");
+        }
+    }
     }
 
     void UpdateHud()
@@ -230,5 +273,6 @@ public class GameManager : MonoBehaviour
         spawner.enabled = false;
 
         monitorText.text = $"You're fired!\nFinal score: {score}";
+        answerText.text = "";
     }
 }

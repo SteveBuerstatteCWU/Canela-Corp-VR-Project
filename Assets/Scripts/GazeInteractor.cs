@@ -1,4 +1,3 @@
-
 using UnityEngine;
 
 public class GazeInteractor : MonoBehaviour
@@ -12,11 +11,11 @@ public class GazeInteractor : MonoBehaviour
 
     static bool Tapped()
     {
-#if UNITY_EDITOR
-        return Input.GetMouseButtonDown(0);     // left click = Cardboard button
-#else
-        return Google.XR.Cardboard.Api.IsTriggerPressed;
-#endif
+        #if UNITY_EDITOR
+                return Input.GetMouseButtonDown(0);     // left click = Cardboard button
+        #else
+                return Google.XR.Cardboard.Api.IsTriggerPressed;
+        #endif
     }
 
     void Update()
@@ -47,9 +46,13 @@ public class GazeInteractor : MonoBehaviour
 
             if (tap && slot != null)
             {
-                held.SetHighlight(false);        // remove highlight when placing
-                game.TryPlace(held, slot);
-                held = null;
+                // true  = the block left the player's hands (placed, or sent back to the belt)
+                // false = keep holding it (the player still has to choose a block to evict)
+                if (game.TryPlace(held, slot))
+                {
+                    held.SetHighlight(false);    // remove highlight once it is placed
+                    held = null;
+                }
             }
         }
     }
